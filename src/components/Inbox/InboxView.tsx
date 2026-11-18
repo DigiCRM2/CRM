@@ -198,10 +198,10 @@ export const InboxView: React.FC<InboxViewProps> = ({
   router,
 }) => {
   const [channelFilter, setChannelFilter] = useState<string>("all");
+  const [loadingConvId, setLoadingConvId] = useState<string | null>(null);
   const [mobileStage, setMobileStage] = useState<"list" | "chat" | "info">(
     "list",
   );
-  const [loadingConvId, setLoadingConvId] = useState<string | null>(null);
   const [inputText, setInputText] = useState<string>("");
   const [tagInput, setTagInput] = useState<string>("");
   const [isQuickRepliesModalOpen, setIsQuickRepliesModalOpen] =
@@ -1370,8 +1370,8 @@ export const InboxView: React.FC<InboxViewProps> = ({
             {/* Message Thread */}
             <div className="relative flex-1 p-5 overflow-y-auto space-y-3.5 bg-[#efeae2]/60 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px]">
               {loadingConvId && (
-                <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 z-20">
-                  <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center z-20">
+                  <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
                 </div>
               )}
               {activeMessages
