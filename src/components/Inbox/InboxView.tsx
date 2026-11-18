@@ -198,6 +198,7 @@ export const InboxView: React.FC<InboxViewProps> = ({
   router,
 }) => {
   const [channelFilter, setChannelFilter] = useState<string>("all");
+  const [loadingConvId, setLoadingConvId] = useState<string | null>(null);
   const [mobileStage, setMobileStage] = useState<"list" | "chat" | "info">(
     "list",
   );
@@ -977,8 +978,10 @@ export const InboxView: React.FC<InboxViewProps> = ({
                 <div
                   key={conv.id}
                   onClick={() => {
+                    setLoadingConvId(conv.id);
                     onSelectConversation(conv.id);
                     setMobileStage("chat");
+                    setTimeout(() => setLoadingConvId(null), 800);
                   }}
                   className={`p-3.5 flex items-start gap-3 cursor-pointer transition-all relative ${
                     isSelected
@@ -1366,6 +1369,11 @@ export const InboxView: React.FC<InboxViewProps> = ({
 
             {/* Message Thread */}
             <div className="relative flex-1 p-5 overflow-y-auto space-y-3.5 bg-[#efeae2]/60 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px]">
+              {loadingConvId && (
+                <div className="absolute inset-0 flex items-center justify-center z-20">
+                  <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
               {activeMessages
                 .filter(
                   (msg) =>
