@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { apiFetch } from "@/lib/apiClient";
 import {
   Conversation,
@@ -180,6 +180,240 @@ const MAX_IMAGE_SIZE_MB =
 const MAX_VIDEO_SIZE_MB =
   Number(process.env.NEXT_PUBLIC_MAX_VIDEO_SIZE_MB) || 16;
 
+const MAIN_QUICK_REPLY_CATEGORIES = [
+  "BRANDING Y DISEÑO",
+  "DISEÑO Y DESARROLLO WEB",
+  "GESTIÓN DE REDES SOCIALES",
+  "MARKETING Y GESTIÓN DIGITAL",
+] as const;
+
+const normalizeCategory = (value?: string | null) =>
+  (value || "").trim().toUpperCase();
+
+interface QuickRepliesBarProps {
+  quickReplies: QuickReply[];
+  onExecute: (qr: QuickReply) => void;
+  onOpenModal: () => void;
+}
+
+const QuickRepliesBar = React.memo<QuickRepliesBarProps>(
+  ({ quickReplies, onExecute, onOpenModal }) => {
+    // null = cerrado | "ALL" = todas | string = categoría específica
+    const [activeCategory, setActiveCategory] = useState<string | null>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    // Pre-agrupa las plantillas una sola vez cuando cambia quickReplies
+    const groupedReplies = useMemo(() => {
+      const map: Record<string, QuickReply[]> = {};
+      for (const cat of MAIN_QUICK_REPLY_CATEGORIES) {
+        map[normalizeCategory(cat)] = [];
+      }
+      for (const qr of quickReplies) {
+        const key = normalizeCategory(qr.category);
+        if (!map[key]) map[key] = [];
+        map[key].push(qr);
+      }
+      return map;
+    }, [quickReplies]);
+
+    const visibleReplies = useMemo(() => {
+      if (activeCategory === null) return [];
+      if (activeCategory === "ALL") return quickReplies;
+      return groupedReplies[normalizeCategory(activeCategory)] || [];
+    }, [activeCategory, quickReplies, groupedReplies]);
+
+    // Cierra al hacer clic fuera o presionar Escape
+    useEffect(() => {
+      if (activeCategory === null) return;
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") setActiveCategory(null);
+      };
+      const handleClickOutside = (e: MouseEvent) => {
+        if (
+          containerRef.current &&
+          !containerRef.current.contains(e.target as Node)
+        ) {
+          setActiveCategory(null);
+        }
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => {
+        window.removeEventListener("keydown", handleKeyDown);
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }, [activeCategory]);
+
+    const toggleCategory = (category: string) => {
+      setActiveCategory((prev) => (prev === category ? null : category));
+    };
+
+    return (
+      <div ref={containerRef} className="relative">
+        {/* Panel Flotante de Plantillas (No empuja el historial del chat) */}
+        {activeCategory !== null && (
+          <div className="absolute bottom-full left-0 right-0 mb-2 z-30 bg-white border border-purple-200 rounded-2xl shadow-lg shadow-purple-950/10 overflow-hidden transition-all duration-150 ease-out">
+            {/* Cabecera del panel en tono lavanda claro */}
+            <div className="px-3 py-1.5 bg-purple-50/90 border-b border-purple-100 flex items-center justify-between">
+              <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wide flex items-center gap-1.5">
+                <Zap className="w-3 h-3 text-purple-600" />
+                {activeCategory === "ALL"
+                  ? `Todas las plantillas (${visibleReplies.length})`
+                  : `${activeCategory} (${visibleReplies.length})`}
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveCategory(null)}
+                title="Cerrar (Esc)"
+                className="p-0.5 text-purple-400 hover:text-purple-900 hover:bg-purple-100 rounded-md transition-colors cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Lista de píldoras */}
+            <div className="p-2.5">
+              {visibleReplies.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveCategory(null);
+                    onOpenModal();
+                  }}
+                  className="text-[11px] text-purple-800 hover:text-purple-900 italic py-1 cursor-pointer block"
+                >
+                  No hay plantillas en esta categoría. Haz clic aquí para crear
+                  una...
+                </button>
+              ) : (
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1 scrollbar-thin">
+                  {visibleReplies.map((qr) => (
+                    <button
+                      key={qr.id}
+                      type="button"
+                      onClick={() => {
+                        onExecute(qr);
+                        setActiveCategory(null);
+                      }}
+                      title={
+                        qr.imageUrl
+                          ? `Enviar: "${qr.text}" + Imagen adjunta`
+                          : `Insertar: "${qr.text}"`
+                      }
+                      className={`px-2.5 py-1.5 rounded-xl text-[11px] font-semibold shrink-0 inline-flex items-center gap-1.5 transition-colors duration-100 cursor-pointer active:scale-95 border ${
+                        qr.imageUrl
+                          ? "bg-fuchsia-50 hover:bg-fuchsia-100 text-purple-950 border-fuchsia-200 font-bold"
+                          : "bg-purple-50/40 hover:bg-purple-100/80 text-slate-800 hover:text-purple-950 border-purple-200/70 hover:border-purple-300"
+                      }`}
+                    >
+                      <span>{qr.emoji || "⚡"}</span>
+                      <span className="max-w-[170px] truncate">{qr.title}</span>
+                      {qr.subcategory && (
+                        <span className="text-[9px] text-purple-600/80 font-medium">
+                          • {qr.subcategory}
+                        </span>
+                      )}
+                      {qr.imageUrl && (
+                        <ImageIcon className="w-3 h-3 text-fuchsia-600 shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Barra Compacta de Categorías */}
+        <div className="flex items-center gap-1.5">
+          {/* 1. Botón Principal: Morado oscuro institucional de Digimedia */}
+          <button
+            type="button"
+            onClick={onOpenModal}
+            title="Gestionar y crear plantillas rápidas"
+            className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-[#2B1055] hover:bg-[#3F197A] text-white rounded-xl text-[11px] font-extrabold transition-colors duration-100 cursor-pointer shadow-xs"
+          >
+            <Zap className="w-3 h-3 text-fuchsia-300 shrink-0" />
+            <span>Plantillas</span>
+            <span className="px-1.5 py-0.2 bg-white/15 text-purple-100 rounded-full text-[9px] font-mono">
+              {quickReplies.length}
+            </span>
+            <Plus className="w-3 h-3 text-purple-200 shrink-0" />
+          </button>
+
+          {/* 2. Las 4 Categorías Principales (Lavanda suave -> Morado activo) */}
+          <div
+            ref={scrollRef}
+            onWheel={(e) => {
+              if (e.deltaY !== 0) {
+                e.preventDefault();
+                e.currentTarget.scrollLeft += e.deltaY;
+              }
+            }}
+            className="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar whitespace-nowrap"
+          >
+            {MAIN_QUICK_REPLY_CATEGORIES.map((category) => {
+              const isActive = activeCategory === category;
+              const count =
+                groupedReplies[normalizeCategory(category)]?.length ?? 0;
+
+              return (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => toggleCategory(category)}
+                  title={`Ver plantillas de ${category}`}
+                  className={`px-2.5 py-1.5 rounded-xl text-[10px] font-extrabold shrink-0 inline-flex items-center gap-1.5 transition-colors duration-100 cursor-pointer border ${
+                    isActive
+                      ? "bg-purple-700 text-white border-purple-700 shadow-xs shadow-purple-700/20"
+                      : "bg-purple-50/75 hover:bg-purple-100 text-purple-950 border-purple-200/80"
+                  }`}
+                >
+                  <span>{category}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${
+                      isActive
+                        ? "bg-white/20 text-white"
+                        : "bg-white text-purple-700 border border-purple-200/70"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 3. Botón "Todas" */}
+          <button
+            type="button"
+            onClick={() => toggleCategory("ALL")}
+            title={
+              activeCategory === "ALL"
+                ? "Cerrar lista de plantillas"
+                : "Ver todas las plantillas"
+            }
+            className={`shrink-0 px-2.5 py-1.5 rounded-xl border text-[10px] font-extrabold inline-flex items-center gap-1 cursor-pointer transition-colors duration-100 ${
+              activeCategory === "ALL"
+                ? "bg-purple-700 border-purple-700 text-white shadow-xs"
+                : "bg-white hover:bg-purple-50 border-purple-200 text-purple-900"
+            }`}
+          >
+            <span>{activeCategory === "ALL" ? "Menos" : "Todas"}</span>
+            <ChevronDown
+              className={`w-3 h-3 transition-transform duration-150 ${
+                activeCategory === "ALL" ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+    );
+  },
+);
+QuickRepliesBar.displayName = "QuickRepliesBar";
+
 export const InboxView: React.FC<InboxViewProps> = ({
   conversations,
   activeConversationId,
@@ -212,8 +446,27 @@ export const InboxView: React.FC<InboxViewProps> = ({
     type: "image" | "video";
   } | null>(null);
 
-  const [isQuickRepliesExpanded, setIsQuickRepliesExpanded] =
-    useState<boolean>(false);
+  // null = cerrado | "ALL" = todas las plantillas | string = categoría específica
+  const [activeQuickReplyCategory, setActiveQuickReplyCategory] = useState<
+    string | null
+  >(null);
+
+  const toggleQuickReplyCategory = (category: string) => {
+    setActiveQuickReplyCategory((prev) =>
+      prev === category ? null : category,
+    );
+  };
+
+  const filteredQuickReplies =
+    activeQuickReplyCategory === null
+      ? []
+      : activeQuickReplyCategory === "ALL"
+        ? quickReplies
+        : quickReplies.filter(
+            (qr) =>
+              normalizeCategory(qr.category) ===
+              normalizeCategory(activeQuickReplyCategory),
+          );
 
   // Estados para adjuntar Foto o Video con vista previa estilo WhatsApp Web
   const [attachedMedia, setAttachedMedia] = useState<{
@@ -1593,103 +1846,12 @@ export const InboxView: React.FC<InboxViewProps> = ({
 
             {/* Quick Templates Bar & Composer */}
             <div className="p-3 border-t border-slate-200 bg-white space-y-2 shadow-xs">
-              {/* Barra Superior de Respuestas Rápidas */}
-              <div className="flex items-start gap-1.5">
-                {/* 1. Botón Único Unificado: Abre el Modal de Gestión / Creación */}
-                <button
-                  type="button"
-                  onClick={() => setIsQuickRepliesModalOpen(true)}
-                  title="Gestionar y crear plantillas rápidas"
-                  className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold transition-colors cursor-pointer shadow-2xs"
-                >
-                  <Zap className="w-3 h-3 text-emerald-400 shrink-0" />
-                  <span>Plantillas</span>
-                  <span className="px-1.5 py-0.2 bg-white/15 text-white rounded-full text-[9px] font-mono">
-                    {quickReplies.length}
-                  </span>
-                  <Plus className="w-3 h-3 text-slate-300 shrink-0" />
-                </button>
-
-                {/* 2. Contenedor de Píldoras (1 línea compacta o Expandible en wrap) */}
-                <div
-                  ref={quickRepliesScrollRef}
-                  onWheel={(e) => {
-                    if (!isQuickRepliesExpanded && e.deltaY !== 0) {
-                      e.preventDefault();
-                      e.currentTarget.scrollLeft += e.deltaY;
-                    }
-                  }}
-                  className={`flex-1 flex items-center gap-1.5 text-xs transition-all ${
-                    isQuickRepliesExpanded
-                      ? "flex-wrap max-h-24 overflow-y-auto pr-1 scrollbar-thin"
-                      : "overflow-x-auto no-scrollbar whitespace-nowrap mask-fade-right"
-                  }`}
-                >
-                  {quickReplies.length === 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => setIsQuickRepliesModalOpen(true)}
-                      className="text-[11px] text-slate-400 hover:text-emerald-600 italic py-0.5 cursor-pointer"
-                    >
-                      Sin plantillas rápidas. Haz clic aquí para crear la
-                      primera...
-                    </button>
-                  ) : (
-                    quickReplies.map((qr) => (
-                      <button
-                        key={qr.id}
-                        type="button"
-                        onClick={() => handleExecuteQuickReply(qr)}
-                        title={
-                          qr.imageUrl
-                            ? `Enviar: "${qr.text}" + Imagen adjunta`
-                            : `Insertar: "${qr.text}"`
-                        }
-                        className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold shrink-0 inline-flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
-                          qr.imageUrl
-                            ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold"
-                            : "bg-slate-100 hover:bg-emerald-50 hover:text-emerald-900 hover:border-emerald-300 border border-slate-200/90 text-slate-700"
-                        }`}
-                      >
-                        <span>{qr.emoji || "⚡"}</span>
-                        <span className="max-w-[140px] truncate">
-                          {qr.title}
-                        </span>
-                        {qr.imageUrl && (
-                          <ImageIcon className="w-3 h-3 text-emerald-600 shrink-0" />
-                        )}
-                      </button>
-                    ))
-                  )}
-                </div>
-
-                {/* 3. Botón para expandir/contraer si hay varias plantillas */}
-                {quickReplies.length > 3 && (
-                  <button
-                    type="button"
-                    onClick={() => setIsQuickRepliesExpanded((prev) => !prev)}
-                    title={
-                      isQuickRepliesExpanded
-                        ? "Contraer plantillas a una sola fila"
-                        : "Ver todas las plantillas"
-                    }
-                    className={`shrink-0 px-2 py-1 rounded-xl border text-[10px] font-extrabold inline-flex items-center gap-1 cursor-pointer transition-all ${
-                      isQuickRepliesExpanded
-                        ? "bg-emerald-50 border-emerald-300 text-emerald-800"
-                        : "bg-white hover:bg-slate-100 border-slate-200 text-slate-600"
-                    }`}
-                  >
-                    <span className="hidden sm:inline">
-                      {isQuickRepliesExpanded ? "Menos" : "Todas"}
-                    </span>
-                    <ChevronDown
-                      className={`w-3 h-3 transition-transform duration-200 ${
-                        isQuickRepliesExpanded ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-                )}
-              </div>
+              {/* Barra Superior de Respuestas Rápidas por Categoría */}
+              <QuickRepliesBar
+                quickReplies={quickReplies}
+                onExecute={handleExecuteQuickReply}
+                onOpenModal={() => setIsQuickRepliesModalOpen(true)}
+              />
 
               {/* Caja de Texto Principal (Composer) */}
               <div className="relative flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-2 focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all shadow-inner">
