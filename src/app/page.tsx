@@ -1775,6 +1775,8 @@ export default function HomePage() {
               onSendMessage={handleSendMessage}
               onUpdateContactStage={handleUpdateContactStage}
               onUpdateContactTags={handleUpdateContactTags}
+              //onUpdateContactDetails={handleUpdateContactDetails}
+              //onUpdateContactDealValue={handleUpdateContactDealValue}
               onUpdateContactNotes={handleUpdateContactNotes}
               searchQuery={searchQuery}
               quickReplies={quickReplies}
